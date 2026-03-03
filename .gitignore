@@ -1,0 +1,17 @@
+__pycache__/
+*.pyc
+*.egg-info/
+dist/
+build/
+.eggs/
+venv/
+.venv/
+.env
+.vscode/
+.idea/
+*.pkl
+config/T_ee_cam.yaml
+Stage3_Final_Plan.md
+Stage3_Claude_Code_Tasks.md
+CLAUDE.md
+

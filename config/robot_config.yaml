@@ -1,0 +1,42 @@
+robot:
+  type: g1_29
+  active_arm: left
+  simulation_mode: true
+  dds_domain_id: 1
+
+control:
+  velocity_limit: 20.0
+  max_translation_step: 10.0
+  max_rotation_step: 5.0
+
+safety:
+  workspace_bounds:
+    x_min: -0.3
+    x_max: 0.5
+    y_min: -0.3
+    y_max: 0.5
+    z_min: -0.2
+    z_max: 0.6
+  heartbeat_timeout_ms: 200
+  ik_max_iterations: 30
+
+execution:
+  mode: trigger
+
+zmq:
+  subscribe_address: "tcp://localhost:5556"
+  publish_address: "tcp://*:5556"
+  timeout_ms: 100
+
+calibration:
+  transform_path: "config/T_ee_cam.yaml"
+
+magnitudes:
+  translation:
+    SMALL: 2.0
+    MID: 4.0
+    BIG: 6.0
+  rotation:
+    SMALL: 1.0
+    MID: 2.0
+    BIG: 3.0
