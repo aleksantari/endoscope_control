@@ -92,30 +92,44 @@ class ActionBridge:
         return T
 
     def _rotation_delta(self, command: RobotCommand) -> np.ndarray:
-        """Build rotation delta for a rotation command."""
+        """Build rotation delta for a rotation command.
+
+        Uses the full similarity transform: delta_ee = T @ delta_cam @ T^(-1).
+        This correctly handles T_ee_cam with a translation component — a pure
+        rotation in camera frame produces both rotation and translation in EE
+        frame when the camera is offset from the EE origin.
+        """
         angle_rad = self._get_magnitude_radians(command)
         axis_cam = _ROTATION_MAP[command.action]
 
-        # The axis direction already encodes the rotation sign
-        # (e.g. ROTATE_RIGHT = [0,0,-1] means CW about Z)
-        # Transform axis to EE frame — pass full signed axis and positive angle
-        axis_ee, angle_rad = self.calibration.camera_to_ee_rotation(
-            axis_cam, angle_rad
-        )
+        # Build full 4x4 rotation delta in camera frame
+        R_cam = _axis_angle_to_rotation_matrix(axis_cam, angle_rad)
+        delta_cam = np.eye(4)
+        delta_cam[:3, :3] = R_cam
 
-        R = _axis_angle_to_rotation_matrix(axis_ee, angle_rad)
-        T = np.eye(4)
-        T[:3, :3] = R
-        return T
+        # Full similarity transform to EE frame
+        T = self.calibration.get_T_ee_cam()
+        T_inv = np.linalg.inv(T)
+        return T @ delta_cam @ T_inv
 
     def _get_magnitude_meters(self, command: RobotCommand) -> float:
-        """Return the translation magnitude in meters."""
+        """Return the translation magnitude in meters.
+
+        Uses config lookup by magnitude level, but prefers command.value_mm
+        when explicitly set (override from voice pipeline or VLA).
+        """
+        if "value_mm" in command.model_fields_set:
+            return command.value_mm / 1000.0
         magnitude = command.magnitude or MagnitudeLevel.MID
-        mm = self.translation_magnitudes[magnitude]
-        return mm / 1000.0
+        return self.translation_magnitudes[magnitude] / 1000.0
 
     def _get_magnitude_radians(self, command: RobotCommand) -> float:
-        """Return the rotation magnitude in radians (absolute value)."""
+        """Return the rotation magnitude in radians.
+
+        For rotation commands, value_mm is repurposed as value_deg
+        (per shared protocol). Prefers explicit value when set.
+        """
+        if "value_mm" in command.model_fields_set:
+            return np.deg2rad(command.value_mm)
         magnitude = command.magnitude or MagnitudeLevel.MID
-        deg = self.rotation_magnitudes[magnitude]
-        return np.deg2rad(deg)
+        return np.deg2rad(self.rotation_magnitudes[magnitude])

@@ -5,12 +5,6 @@ from typing import Tuple
 
 import numpy as np
 
-try:
-    import pinocchio as pin
-    _PINOCCHIO_AVAILABLE = True
-except ImportError:
-    _PINOCCHIO_AVAILABLE = False
-
 logger = logging.getLogger(__name__)
 
 
@@ -28,7 +22,10 @@ class FKSolver:
             reduced_robot_model: Pinocchio Model (the reduced model from G1_29_ArmIK
                                  with legs/waist/hands locked, only 14 arm DOFs).
         """
-        if not _PINOCCHIO_AVAILABLE:
+        try:
+            import pinocchio as pin
+            self._pin = pin
+        except ImportError:
             raise ImportError("pinocchio is required for FKSolver")
 
         self.model = reduced_robot_model
@@ -45,7 +42,7 @@ class FKSolver:
         Returns:
             (L_pose, R_pose) — each a 4x4 homogeneous transform.
         """
-        pin.framesForwardKinematics(self.model, self.data, q)
+        self._pin.framesForwardKinematics(self.model, self.data, q)
         L_pose = self.data.oMf[self.L_ee_id].homogeneous
         R_pose = self.data.oMf[self.R_ee_id].homogeneous
         return L_pose.copy(), R_pose.copy()

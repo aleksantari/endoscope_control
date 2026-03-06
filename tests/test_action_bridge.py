@@ -141,6 +141,49 @@ class TestAllActions:
             assert not np.allclose(delta, np.eye(4)), f"{action} produced identity"
 
 
+class TestValueMmOverride:
+    def test_translation_uses_value_mm_when_differs_from_config(self, identity_bridge):
+        """When value_mm differs from config default for the magnitude,
+        prefer value_mm (explicit override from voice pipeline or VLA)."""
+        cmd = RobotCommand(
+            action=ActionType.MOVE_UP,
+            magnitude=MagnitudeLevel.SMALL,  # config default: 2.0mm
+            value_mm=5.0,  # explicit override
+        )
+        delta = identity_bridge.command_to_delta(cmd)
+        t = delta[:3, 3]
+        # Should use 5.0mm = 0.005m, not config's 2.0mm
+        np.testing.assert_allclose(t, [0.0, -0.005, 0.0], atol=1e-9)
+
+    def test_translation_uses_config_when_value_mm_matches(self, identity_bridge):
+        """When value_mm matches config default, behaves the same."""
+        cmd = RobotCommand(
+            action=ActionType.MOVE_FORWARD,
+            magnitude=MagnitudeLevel.MID,
+            value_mm=4.0,  # matches config default for MID
+        )
+        delta = identity_bridge.command_to_delta(cmd)
+        t = delta[:3, 3]
+        np.testing.assert_allclose(t, [0.0, 0.0, 0.004], atol=1e-9)
+
+    def test_rotation_uses_value_mm_as_degrees_when_overridden(self, identity_bridge):
+        """For rotations, value_mm is repurposed as value_deg.
+        When it differs from config, prefer it."""
+        cmd = RobotCommand(
+            action=ActionType.ROTATE_LEFT,
+            magnitude=MagnitudeLevel.SMALL,  # config default: 1.0 deg
+            value_mm=2.5,  # explicit override: 2.5 degrees
+        )
+        delta = identity_bridge.command_to_delta(cmd)
+        angle_rad = np.deg2rad(2.5)
+        expected_R = np.array([
+            [np.cos(angle_rad), -np.sin(angle_rad), 0.0],
+            [np.sin(angle_rad),  np.cos(angle_rad), 0.0],
+            [0.0, 0.0, 1.0],
+        ])
+        np.testing.assert_allclose(delta[:3, :3], expected_R, atol=1e-9)
+
+
 class TestNonIdentityCalibration:
     def test_move_right_with_90deg_z_rotation(self, rotated_bridge):
         """MOVE_RIGHT with 90deg Z rotation in T_ee_cam.
@@ -161,3 +204,49 @@ class TestNonIdentityCalibration:
         delta = rotated_bridge.command_to_delta(cmd)
         t = delta[:3, 3]
         np.testing.assert_allclose(t, [0.0, 0.0, 0.002], atol=1e-9)
+
+    def test_rotation_with_offset_produces_translation_correction(self):
+        """When T_ee_cam has a translation offset, a pure rotation in camera
+        frame produces both rotation AND translation in EE frame via the
+        similarity transform T @ delta @ T^(-1).
+
+        Camera is 10cm along EE X-axis. A 90° rotation about camera Z
+        should produce a translation correction in EE frame.
+        """
+        T = np.eye(4)
+        T[0, 3] = 0.1  # 10cm offset along X
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
+            yaml.dump({"T_ee_cam": T.tolist()}, f)
+            path = f.name
+        try:
+            cal = CalibrationLoader(path)
+            config = yaml.safe_load(open("config/robot_config.yaml"))
+            bridge = ActionBridge(cal, config)
+
+            # Use a large rotation to make the translation correction visible
+            # ROTATE_LEFT BIG = 3 degrees about +Z
+            cmd = RobotCommand(
+                action=ActionType.ROTATE_LEFT, magnitude=MagnitudeLevel.BIG
+            )
+            delta = bridge.command_to_delta(cmd)
+
+            # Rotation part: R_z(3°) conjugated by identity rotation = R_z(3°)
+            angle = np.deg2rad(3.0)
+            expected_R = np.array([
+                [np.cos(angle), -np.sin(angle), 0.0],
+                [np.sin(angle),  np.cos(angle), 0.0],
+                [0.0, 0.0, 1.0],
+            ])
+            np.testing.assert_allclose(delta[:3, :3], expected_R, atol=1e-9)
+
+            # Translation part: p - R @ p where p = [0.1, 0, 0]
+            # = [0.1, 0, 0] - [0.1*cos(3°), 0.1*sin(3°), 0]
+            # = [0.1*(1-cos(3°)), -0.1*sin(3°), 0]
+            p = np.array([0.1, 0.0, 0.0])
+            expected_t = p - expected_R @ p
+            np.testing.assert_allclose(delta[:3, 3], expected_t, atol=1e-9)
+
+            # Verify the translation is non-zero (this is the whole point)
+            assert np.linalg.norm(delta[:3, 3]) > 1e-6
+        finally:
+            os.unlink(path)
