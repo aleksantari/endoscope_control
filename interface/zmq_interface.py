@@ -1,9 +1,11 @@
 """ZMQCommandInterface — ZMQ subscriber receiving commands from voice_control."""
 
+import json
 import logging
 from typing import Optional
 
 import zmq
+from pydantic import ValidationError
 
 from interface.command_interface import CommandInterface
 from protocol.command_schema import RobotCommand
@@ -38,7 +40,11 @@ class ZMQCommandInterface(CommandInterface):
         if self.socket in socks:
             message = self.socket.recv_string()
             logger.debug("Received ZMQ message: %s", message)
-            return RobotCommand.from_json_string(message)
+            try:
+                return RobotCommand.from_json_string(message)
+            except (json.JSONDecodeError, ValidationError) as e:
+                logger.warning("Malformed ZMQ message, skipping: %s", e)
+                return None
         return None
 
     def close(self) -> None:

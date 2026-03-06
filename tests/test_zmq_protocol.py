@@ -9,6 +9,7 @@ import pytest
 import zmq
 
 from interface.text_interface import TextCommandInterface
+from interface.zmq_interface import ZMQCommandInterface
 from protocol.command_schema import ActionType, MagnitudeLevel, RobotCommand
 
 
@@ -61,6 +62,60 @@ class TestZMQRoundTrip:
         assert cmd.confidence == original.confidence
         assert cmd.value_mm == original.value_mm
         assert cmd.raw_text == original.raw_text
+
+
+class TestZMQMalformedMessages:
+    def test_invalid_json_returns_none(self):
+        """Malformed JSON should return None, not crash."""
+        port = 5559
+        received = {"result": "not_set"}
+
+        def publisher():
+            ctx = zmq.Context()
+            sock = ctx.socket(zmq.PUB)
+            sock.bind(f"tcp://*:{port}")
+            time.sleep(0.3)
+            sock.send_string("this is not valid json{{{")
+            time.sleep(0.1)
+            sock.close()
+            ctx.term()
+
+        t = threading.Thread(target=publisher)
+        t.start()
+
+        iface = ZMQCommandInterface(f"tcp://localhost:{port}", timeout_ms=2000)
+        cmd = iface.get_next_command()
+        received["result"] = cmd
+        iface.close()
+        t.join()
+
+        assert received["result"] is None
+
+    def test_invalid_schema_returns_none(self):
+        """Valid JSON but invalid schema should return None, not crash."""
+        port = 5560
+        received = {"result": "not_set"}
+
+        def publisher():
+            ctx = zmq.Context()
+            sock = ctx.socket(zmq.PUB)
+            sock.bind(f"tcp://*:{port}")
+            time.sleep(0.3)
+            sock.send_string(json.dumps({"action": "INVALID_ACTION", "magnitude": "SMALL"}))
+            time.sleep(0.1)
+            sock.close()
+            ctx.term()
+
+        t = threading.Thread(target=publisher)
+        t.start()
+
+        iface = ZMQCommandInterface(f"tcp://localhost:{port}", timeout_ms=2000)
+        cmd = iface.get_next_command()
+        received["result"] = cmd
+        iface.close()
+        t.join()
+
+        assert received["result"] is None
 
 
 class TestTextCommandInterface:
