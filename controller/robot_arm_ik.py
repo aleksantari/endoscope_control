@@ -37,6 +37,7 @@ class G1_29_ArmIK:
             self.robot, self.reduced_robot = self.load_cache()
         else:
             logger_mp.info("[G1_29_ArmIK] >>> Loading URDF (slow)...")
+            ### Load full robot
             self.robot = pin.RobotWrapper.BuildFromURDF(self.urdf_path, self.model_dir)
 
             self.mixed_jointsToLockIDs = [
@@ -72,24 +73,24 @@ class G1_29_ArmIK:
                                             "right_hand_middle_0_joint",
                                             "right_hand_middle_1_joint"
                                         ]
-
+            ### reduce to only arms
             self.reduced_robot = self.robot.buildReducedRobot(
                 list_of_joints_to_lock=self.mixed_jointsToLockIDs,
                 reference_configuration=np.array([0.0] * self.robot.model.nq),
             )
-
+            ### add custom EE frames
             self.reduced_robot.model.addFrame(
                 pin.Frame('L_ee',
                           self.reduced_robot.model.getJointId('left_wrist_yaw_joint'),
                           pin.SE3(np.eye(3),
-                                  np.array([0.05,0,0]).T),
+                                  np.array([0.00,0,0]).T),
                           pin.FrameType.OP_FRAME)
             )
             self.reduced_robot.model.addFrame(
                 pin.Frame('R_ee',
                           self.reduced_robot.model.getJointId('right_wrist_yaw_joint'),
                           pin.SE3(np.eye(3),
-                                  np.array([0.05,0,0]).T),
+                                  np.array([0.00,0,0]).T),
                           pin.FrameType.OP_FRAME)
             )
             # Save cache (only after everything is built)
@@ -102,6 +103,7 @@ class G1_29_ArmIK:
         #     frame_id = self.reduced_robot.model.getFrameId(frame.name)
         #     logger_mp.debug(f"Frame ID: {frame_id}, Name: {frame.name}")
 
+        ### build the CasADi symbolic model
         # Creating Casadi models and data for symbolic computing
         self.cmodel = cpin.Model(self.reduced_robot.model)
         self.cdata = self.cmodel.createData()

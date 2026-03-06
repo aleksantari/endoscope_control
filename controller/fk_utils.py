@@ -5,6 +5,13 @@ from typing import Tuple
 
 import numpy as np
 
+try:
+    import pinocchio as pin
+    self._pin = pin
+except ImportError:
+    raise ImportError("pinocchio is required for FKSolver")
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -22,15 +29,11 @@ class FKSolver:
             reduced_robot_model: Pinocchio Model (the reduced model from G1_29_ArmIK
                                  with legs/waist/hands locked, only 14 arm DOFs).
         """
-        try:
-            import pinocchio as pin
-            self._pin = pin
-        except ImportError:
-            raise ImportError("pinocchio is required for FKSolver")
 
-        self.model = reduced_robot_model
-        self.data = self.model.createData()
-        self.L_ee_id = self.model.getFrameId("L_ee")
+
+        self.model = reduced_robot_model # same model the IK built
+        self.data = self.model.createData() # our own data (scatch space)
+        self.L_ee_id = self.model.getFrameId("L_ee") 
         self.R_ee_id = self.model.getFrameId("R_ee")
 
     def compute_ee_poses(self, q: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
@@ -42,8 +45,8 @@ class FKSolver:
         Returns:
             (L_pose, R_pose) — each a 4x4 homogeneous transform.
         """
-        self._pin.framesForwardKinematics(self.model, self.data, q)
-        L_pose = self.data.oMf[self.L_ee_id].homogeneous
+        self._pin.framesForwardKinematics(self.model, self.data, q) # compute all frames
+        L_pose = self.data.oMf[self.L_ee_id].homogeneous # extract 4x4
         R_pose = self.data.oMf[self.R_ee_id].homogeneous
         return L_pose.copy(), R_pose.copy()
 
