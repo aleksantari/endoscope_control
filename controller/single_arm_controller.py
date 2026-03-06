@@ -78,6 +78,13 @@ class SingleArmController:
 
         try:
             sol_q, sol_tau = self.ik.solve_ik(L_target, R_target, current_q, current_dq)
+            # Optional: force inactive arm joints to stay exactly at current values.
+            # The IK solver should keep them still (target = current pose), but this
+            # guarantees zero drift from regularization/smoothing costs.
+            # if self.active_arm == "left":
+            #     sol_q[7:] = current_q[7:]
+            # else:
+            #     sol_q[:7] = current_q[:7]
             self.arm.ctrl_dual_arm(sol_q, sol_tau)
             return {
                 "success": True,

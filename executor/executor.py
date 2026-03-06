@@ -79,7 +79,20 @@ class Executor:
 
         # Step 4: Dry-run if no controller
         if self.controller is None:
-            logger.info("[DRY RUN] Would execute delta for %s", command.action.value)
+            t_mm = delta_se3[:3, 3] * 1000.0
+            R = delta_se3[:3, :3]
+            angle_deg = np.degrees(
+                np.arccos(np.clip((np.trace(R) - 1) / 2, -1.0, 1.0))
+            )
+            matrix_str = "\n".join(
+                f"    [{delta_se3[i, 0]:+.6f}  {delta_se3[i, 1]:+.6f}  {delta_se3[i, 2]:+.6f}  {delta_se3[i, 3]:+.6f}]"
+                for i in range(4)
+            )
+            print(f"\n  [DRY RUN] {command.action.value}")
+            print("  SE3 Delta:")
+            print(matrix_str)
+            print(f"  Translation: dx={t_mm[0]:+.2f}  dy={t_mm[1]:+.2f}  dz={t_mm[2]:+.2f} mm")
+            print(f"  Rotation:    {angle_deg:.2f} deg\n")
             return {
                 "executed": False,
                 "reason": "dry_run",
