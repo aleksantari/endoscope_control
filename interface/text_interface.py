@@ -53,29 +53,32 @@ class TextCommandInterface(CommandInterface):
         """
         try:
             raw = input("Command> ").strip().lower()
-            if not raw or raw == "quit":
-                return None
-
-            parts = raw.split()
-            action_str = parts[0]
-            mag_str = parts[1] if len(parts) > 1 else "mid"
-
-            action = self.ACTION_MAP.get(action_str)
-            if action is None:
-                print(
-                    f"Unknown action: {action_str}. "
-                    f"Options: {list(self.ACTION_MAP.keys())}"
-                )
-                return None
-
-            magnitude = self.MAGNITUDE_MAP.get(mag_str, MagnitudeLevel.MID)
-            value_mm = self._DEFAULT_VALUES[magnitude]
-
-            return RobotCommand(
-                action=action,
-                magnitude=magnitude,
-                value_mm=value_mm,
-                raw_text=raw,
-            )
         except (EOFError, KeyboardInterrupt):
+            raise KeyboardInterrupt
+
+        if not raw:
             return None
+        if raw == "quit":
+            raise KeyboardInterrupt
+
+        parts = raw.split()
+        action_str = parts[0]
+        mag_str = parts[1] if len(parts) > 1 else "mid"
+
+        action = self.ACTION_MAP.get(action_str)
+        if action is None:
+            print(
+                f"Unknown action: {action_str}. "
+                f"Options: {list(self.ACTION_MAP.keys())}"
+            )
+            return None
+
+        magnitude = self.MAGNITUDE_MAP.get(mag_str, MagnitudeLevel.MID)
+        value_mm = self._DEFAULT_VALUES[magnitude]
+
+        return RobotCommand(
+            action=action,
+            magnitude=magnitude,
+            value_mm=value_mm,
+            raw_text=raw,
+        )

@@ -7,7 +7,6 @@ import numpy as np
 
 try:
     import pinocchio as pin
-    self._pin = pin
 except ImportError:
     raise ImportError("pinocchio is required for FKSolver")
 
@@ -45,7 +44,7 @@ class FKSolver:
         Returns:
             (L_pose, R_pose) — each a 4x4 homogeneous transform.
         """
-        self._pin.framesForwardKinematics(self.model, self.data, q) # compute all frames
+        pin.framesForwardKinematics(self.model, self.data, q) # compute all frames
         L_pose = self.data.oMf[self.L_ee_id].homogeneous # extract 4x4
         R_pose = self.data.oMf[self.R_ee_id].homogeneous
         return L_pose.copy(), R_pose.copy()

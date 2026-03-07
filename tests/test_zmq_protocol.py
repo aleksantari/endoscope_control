@@ -163,12 +163,12 @@ class TestTextCommandInterface:
             cmd = iface.get_next_command()
         assert cmd is None
 
-    def test_quit_returns_none(self):
-        """'quit' returns None."""
+    def test_quit_raises_keyboard_interrupt(self):
+        """'quit' raises KeyboardInterrupt to exit run_loop."""
         iface = TextCommandInterface()
         with patch("builtins.input", return_value="quit"):
-            cmd = iface.get_next_command()
-        assert cmd is None
+            with pytest.raises(KeyboardInterrupt):
+                iface.get_next_command()
 
     def test_empty_returns_none(self):
         """Empty input returns None."""

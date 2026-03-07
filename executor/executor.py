@@ -81,9 +81,15 @@ class Executor:
         if self.controller is None:
             t_mm = delta_se3[:3, 3] * 1000.0
             R = delta_se3[:3, :3]
+            skew = R - R.T
             angle_deg = np.degrees(
-                np.arccos(np.clip((np.trace(R) - 1) / 2, -1.0, 1.0))
+                np.arctan2(
+                    np.sqrt(skew[0, 1] ** 2 + skew[0, 2] ** 2 + skew[1, 2] ** 2) / 2,
+                    (np.trace(R) - 1) / 2,
+                )
             )
+            if skew[1, 0] < 0:
+                angle_deg = -angle_deg
             matrix_str = "\n".join(
                 f"    [{delta_se3[i, 0]:+.6f}  {delta_se3[i, 1]:+.6f}  {delta_se3[i, 2]:+.6f}  {delta_se3[i, 3]:+.6f}]"
                 for i in range(4)
@@ -92,7 +98,7 @@ class Executor:
             print("  SE3 Delta:")
             print(matrix_str)
             print(f"  Translation: dx={t_mm[0]:+.2f}  dy={t_mm[1]:+.2f}  dz={t_mm[2]:+.2f} mm")
-            print(f"  Rotation:    {angle_deg:.2f} deg\n")
+            print(f"  Rotation:    {angle_deg:+.2f} deg\n")
             return {
                 "executed": False,
                 "reason": "dry_run",
