@@ -2,24 +2,7 @@
 
 Stage 3 of the **Language-Based Control for Humanoid Endoscope Assistant** project at the [ARCADE Lab](https://arcade.cs.jhu.edu/), Johns Hopkins University. This package receives voice commands over ZeroMQ from the `language_control` pipeline and translates them into precise end-effector motion on a Unitree G1 29-DOF humanoid robot via inverse kinematics.
 
-## Current Status
 
-The full software pipeline is implemented and tested (82 unit tests passing, 1 skipped for DDS). End-to-end ZMQ communication between `language_control` (publisher) and `endoscope_control` (subscriber) has been verified in dry-run mode. The remaining integration step is testing with the Isaac Lab simulation to verify the FK → IK → DDS execution path on the actual robot model.
-
-### What's Working
-- Voice commands received over ZMQ and validated against the shared Pydantic schema
-- ActionBridge converts commands to SE3 deltas in the end-effector frame using camera-to-EE calibration
-- Safety module enforces workspace bounds, delta magnitude limits, joint limits, and IK convergence checks
-- Executor orchestrates the full pipeline with autopilot (immediate) and trigger (operator confirmation) modes
-- SingleArmController wraps the dual-arm IK solver for single-arm endoscope use
-- FK solver (Pinocchio) reuses the IK solver's reduced model
-- Dry-run mode for development without robot hardware
-- STOP command bypasses all processing for immediate freeze
-
-### What's Next
-- Isaac Lab simulation testing with the G1 robot model
-- Real robot deployment with hand-eye calibration matrix from Stage 2
-- VLA (Vision-Language-Action) model integration as an alternative command source
 
 ## Architecture
 
