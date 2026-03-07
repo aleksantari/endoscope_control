@@ -2,6 +2,25 @@
 
 Stage 3 of the **Language-Based Control for Humanoid Endoscope Assistant** project at the [ARCADE Lab](https://arcade.cs.jhu.edu/), Johns Hopkins University. This package receives voice commands over ZeroMQ from the `language_control` pipeline and translates them into precise end-effector motion on a Unitree G1 29-DOF humanoid robot via inverse kinematics.
 
+## Current Status
+
+The full software pipeline is implemented and tested (82 unit tests passing, 1 skipped for DDS). End-to-end ZMQ communication between `language_control` (publisher) and `endoscope_control` (subscriber) has been verified in dry-run mode. The remaining integration step is testing with the Isaac Lab simulation to verify the FK → IK → DDS execution path on the actual robot model.
+
+### What's Working
+- Voice commands received over ZMQ and validated against the shared Pydantic schema
+- ActionBridge converts commands to SE3 deltas in the end-effector frame using camera-to-EE calibration
+- Safety module enforces workspace bounds, delta magnitude limits, joint limits, and IK convergence checks
+- Executor orchestrates the full pipeline with autopilot (immediate) and trigger (operator confirmation) modes
+- SingleArmController wraps the dual-arm IK solver for single-arm endoscope use
+- FK solver (Pinocchio) reuses the IK solver's reduced model
+- Dry-run mode for development without robot hardware
+- STOP command bypasses all processing for immediate freeze
+
+### What's Next
+- Isaac Lab simulation testing with the G1 robot model
+- Real robot deployment with hand-eye calibration matrix from Stage 2
+- VLA (Vision-Language-Action) model integration as an alternative command source
+
 ## Architecture
 
 ```
@@ -20,6 +39,16 @@ voice_control (ZMQ PUB) ──→ endoscope_control (ZMQ SUB)
 ```
 
 The two packages communicate via ZeroMQ PUB/SUB on `tcp://localhost:5556`. The shared contract is the `RobotCommand` JSON schema defined in `protocol/command_schema.py`.
+
+### Pipeline Flow
+
+1. **Voice command** arrives as JSON over ZMQ (e.g., `{"action": "MOVE_UP", "magnitude": "SMALL", ...}`)
+2. **ZMQCommandInterface** validates it against the Pydantic `RobotCommand` model — malformed messages are logged and skipped
+3. **ActionBridge** maps the action + magnitude to an SE3 delta in camera frame, then transforms to EE frame via `T_ee_cam`
+4. **SafetyModule** checks delta magnitude, target workspace bounds, and joint limits
+5. **Executor** applies the delta (autopilot) or prompts the operator for confirmation (trigger mode)
+6. **SingleArmController** gets current pose via FK, applies the delta, solves IK, and publishes joint targets over DDS
+7. If IK fails to converge, the controller falls back to the current position — never sends invalid joints
 
 ## Quick Start
 
@@ -40,15 +69,29 @@ cp /path/to/xr_teleoperate/teleop/robot_arm/robot_arm.py controller/
 cp /path/to/xr_teleoperate/teleop/robot_arm/robot_arm_ik.py controller/
 ```
 
-### 3. Test without a robot (dry-run mode)
+### 3. Run tests
+
+```bash
+conda activate endoscope_control
+cd ~/endoscope_control
+python -m pytest tests/ -v
+```
+
+Expected: 82 passed, 1 skipped (DDS test requires robot connection).
+
+### 4. Test without a robot (dry-run mode)
 
 ```bash
 python -m demo.text_command_demo
 ```
 
-Type commands like `up small`, `forward big`, `stop`, or `quit`.
+Type commands like `up small`, `forward big`, `rl mid`, `stop`, or `quit`. You'll see the formatted SE3 delta matrix, translation in mm, and signed rotation in degrees.
 
 ## Full Pipeline Usage
+
+### Dry-run with ZMQ (no robot needed)
+
+Test the full ZMQ link without robot hardware:
 
 **Terminal 1** — Voice side (language_control env):
 
@@ -58,7 +101,36 @@ conda activate language_control
 python zmq_publisher.py --mode text
 ```
 
-**Terminal 2** — Robot side (endoscope_control env):
+**Terminal 2** — Robot side (endoscope_control env, dry-run):
+
+```bash
+cd ~/endoscope_control
+conda activate endoscope_control
+python -c "
+import logging
+logging.basicConfig(level=logging.INFO, format='%(name)s — %(message)s')
+from executor.executor import Executor
+from executor.modes import ExecutionMode
+from interface.zmq_interface import ZMQCommandInterface
+e = Executor('config/robot_config.yaml', controller=None)
+e.mode = ExecutionMode.AUTOPILOT
+iface = ZMQCommandInterface('tcp://localhost:5556', timeout_ms=100)
+print('Listening on tcp://localhost:5556 ... (Ctrl+C to stop)')
+e.run_loop(iface)
+"
+```
+
+### Full pipeline with robot (simulation)
+
+**Terminal 1** — Voice side:
+
+```bash
+cd ~/language_control
+conda activate language_control
+python zmq_publisher.py --mode mic
+```
+
+**Terminal 2** — Robot side:
 
 ```bash
 cd ~/endoscope_control
@@ -71,9 +143,37 @@ python -m demo.run_controller
 ```
 --arm {left,right}           Active arm (default: from config)
 --mode {autopilot,trigger}   Execution mode (default: from config)
---real                       Use real robot (default: simulation)
+--real                       Use real robot (sets simulation_mode=false, dds_domain_id=0)
 --config PATH                Path to robot_config.yaml
 ```
+
+Examples:
+
+```bash
+python -m demo.run_controller                          # sim, left arm, trigger mode
+python -m demo.run_controller --arm right --mode autopilot
+python -m demo.run_controller --real                   # real robot
+```
+
+## ZMQ Protocol Contract
+
+Both packages must agree on this JSON schema. The subscriber validates with Pydantic — invalid messages are rejected.
+
+```json
+{
+  "action": "MOVE_UP",           // REQUIRED: one of 9 ActionType values
+  "magnitude": "SMALL",          // SMALL / MID / BIG (default: MID)
+  "frame": "CAMERA",             // default: CAMERA
+  "confidence": 0.95,            // 0.0–1.0 (default: 0.9)
+  "value_mm": 2.0,               // magnitude in mm (default: 4.0)
+  "raw_text": "move up a little",// original spoken text (default: "")
+  "timestamp": null              // optional ISO timestamp
+}
+```
+
+**Valid actions**: `MOVE_FORWARD`, `RETRACT`, `MOVE_LEFT`, `MOVE_RIGHT`, `MOVE_UP`, `MOVE_DOWN`, `ROTATE_LEFT`, `ROTATE_RIGHT`, `STOP`
+
+All string values are **case-sensitive and uppercase**.
 
 ## Configuration
 
@@ -104,6 +204,8 @@ Camera frame uses **optical convention**: X = right, Y = down, Z = forward.
 | ROTATE_LEFT   | Z    | +    | rotation |
 | ROTATE_RIGHT  | Z    | -    | rotation |
 | STOP          | --   | --   | freeze |
+
+Note: "move up" maps to **negative Y** because the camera frame uses optical convention (Y points down).
 
 ### Magnitude Levels
 
@@ -143,8 +245,8 @@ endoscope_control/
 │   ├── text_command_demo.py    # dry-run REPL (no robot needed)
 │   └── zmq_echo_test.py        # ZMQ round-trip test
 ├── scripts/
-│   └── zmq_publisher.py        # voice side publisher
-└── tests/                      # pytest test suite
+│   └── zmq_publisher.py        # voice side publisher (copy to language_control)
+└── tests/                      # 82 pytest tests
 ```
 
 ## VLA Integration

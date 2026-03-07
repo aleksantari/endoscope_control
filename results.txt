@@ -1,0 +1,105 @@
+voice_control) [conda:voice_control] santari@pop-os:~/Projects/G1_voice_control$ python demo/pipeline_cli.py text --zmq
+Initializing pipeline...
+
+[ZMQ] Publishing commands on tcp://*:5556
+
+Pipeline ready.
+
+Text mode — type a command, or 'quit' to exit.
+
+> go ahead and move up
+  Action:     MOVE_UP
+  Magnitude:  MID (4.0mm)
+  Confidence: 1.00
+  Source:     llm
+  Valid:      True — ok
+  Latency:    Parse=1263.5ms
+  [ZMQ] Published: {"action": "MOVE_UP", "magnitude": "MID", "frame": "CAMERA", "confidence": 1.0, "value_mm": 4.0, "raw_text": "go ahead and move up", "timestamp": null}
+
+> come back    
+  Action:     RETRACT
+  Magnitude:  MID (4.0mm)
+  Confidence: 0.60
+  Source:     llm
+  Valid:      False — confidence 0.60 < 0.70
+  Latency:    Parse=948.9ms
+
+> move forward
+  Action:     MOVE_FORWARD
+  Magnitude:  MID (4.0mm)
+  Confidence: 1.00
+  Source:     llm
+  Valid:      True — ok
+  Latency:    Parse=1394.9ms
+  [ZMQ] Published: {"action": "MOVE_FORWARD", "magnitude": "MID", "frame": "CAMERA", "confidence": 1.0, "value_mm": 4.0, "raw_text": "move forward", "timestamp": null}
+
+> rotate to the left
+  Action:     ROTATE_LEFT
+  Magnitude:  MID (4.0mm)
+  Confidence: 0.90
+  Source:     llm
+  Valid:      True — ok
+  Latency:    Parse=1116.8ms
+  [ZMQ] Published: {"action": "ROTATE_LEFT", "magnitude": "MID", "frame": "CAMERA", "confidence": 0.9, "value_mm": 4.0, "raw_text": "rotate to the left", "timestamp": null}
+
+
+
+
+
+(endoscope_control) [conda:endoscope_control] santari@pop-os:~/Projects/endoscope_control$ conda activate endoscope_control
+cd ~/Projects/endoscope_control
+python -c "
+import logging
+logging.basicConfig(level=logging.INFO, format='%(name)s — %(message)s')
+from executor.executor import Executor
+from executor.modes import ExecutionMode
+from interface.zmq_interface import ZMQCommandInterface
+e = Executor('config/robot_config.yaml', controller=None)
+e.mode = ExecutionMode.AUTOPILOT
+iface = ZMQCommandInterface('tcp://localhost:5556', timeout_ms=100)
+print('Listening on tcp://localhost:5556 ... (Ctrl+C to stop)')
+e.run_loop(iface)
+"
+bridge.calibration_loader — Loaded T_ee_cam from config/T_ee_cam.yaml
+interface.zmq_interface — ZMQ subscriber connected to tcp://localhost:5556
+Listening on tcp://localhost:5556 ... (Ctrl+C to stop)
+executor.executor — Executor running in autopilot mode
+executor.executor — Received: MOVE_UP / MagnitudeLevel.MID
+
+  [DRY RUN] MOVE_UP
+  SE3 Delta:
+    [+1.000000  +0.000000  +0.000000  +0.000000]
+    [+0.000000  +1.000000  +0.000000  -0.004000]
+    [+0.000000  +0.000000  +1.000000  +0.000000]
+    [+0.000000  +0.000000  +0.000000  +1.000000]
+  Translation: dx=+0.00  dy=-4.00  dz=+0.00 mm
+  Rotation:    +0.00 deg
+
+executor.executor — Result: {'executed': False, 'reason': 'dry_run', 'delta': [[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, -0.004], [0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 0.0, 1.0]]}
+
+executor.executor — Received: MOVE_FORWARD / MagnitudeLevel.MID
+
+  [DRY RUN] MOVE_FORWARD
+  SE3 Delta:
+    [+1.000000  +0.000000  +0.000000  +0.000000]
+    [+0.000000  +1.000000  +0.000000  +0.000000]
+    [+0.000000  +0.000000  +1.000000  +0.004000]
+    [+0.000000  +0.000000  +0.000000  +1.000000]
+  Translation: dx=+0.00  dy=+0.00  dz=+4.00 mm
+  Rotation:    +0.00 deg
+
+executor.executor — Result: {'executed': False, 'reason': 'dry_run', 'delta': [[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.004], [0.0, 0.0, 0.0, 1.0]]}
+executor.executor — Received: ROTATE_LEFT / MagnitudeLevel.MID
+
+  [DRY RUN] ROTATE_LEFT
+  SE3 Delta:
+    [+0.997564  -0.069756  +0.000000  +0.000000]
+    [+0.069756  +0.997564  +0.000000  +0.000000]
+    [+0.000000  +0.000000  +1.000000  +0.000000]
+    [+0.000000  +0.000000  +0.000000  +1.000000]
+  Translation: dx=+0.00  dy=+0.00  dz=+0.00 mm
+  Rotation:    +4.00 deg
+
+executor.executor — Result: {'executed': False, 'reason': 'dry_run', 'delta': [[0.9975640502598242, -0.0697564737441253, 0.0, 0.0], [0.0697564737441253, 0.9975640502598242, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 0.0, 1.0]]}
+
+
