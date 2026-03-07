@@ -85,13 +85,16 @@ def main() -> None:
     print(f"ZMQ subscribing on: {zmq_address}")
     print()
 
+    # Initialize DDS before constructing controller
+    from unitree_sdk2py.core.channel import ChannelFactoryInitialize
+    domain_id = config["robot"]["dds_domain_id"]  # 1 for sim, 0 for real
+    ChannelFactoryInitialize(domain_id)
+    print(f"DDS initialized (domain_id={domain_id})")
+
     # Initialize controller stack
-    arm_controller = G1_29_ArmController(
-        simulation=sim_mode,
-        domain_id=config["robot"]["dds_domain_id"],
-    )
+    arm_controller = G1_29_ArmController(simulation_mode=sim_mode)
     ik_solver = G1_29_ArmIK()
-    fk_solver = FKSolver(ik_solver.model)
+    fk_solver = FKSolver(ik_solver.reduced_robot.model)
     controller = SingleArmController(
         arm_controller, ik_solver, fk_solver, active_arm=active_arm,
     )
