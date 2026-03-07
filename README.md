@@ -79,8 +79,8 @@ Test the full ZMQ link without robot hardware:
 **Terminal 1** — Voice side (language_control env):
 
 ```bash
-cd ~/language_control
-conda activate language_control
+cd ~/voice_control
+conda activate voice_control
 python zmq_publisher.py --mode text
 ```
 
