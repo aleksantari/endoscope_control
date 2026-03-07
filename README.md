@@ -108,8 +108,8 @@ e.run_loop(iface)
 **Terminal 1** — Voice side:
 
 ```bash
-cd ~/language_control
-conda activate language_control
+cd ~/voice_control
+conda activate voice_control
 python zmq_publisher.py --mode mic
 ```
 
